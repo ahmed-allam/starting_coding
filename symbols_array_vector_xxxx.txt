@@ -1,0 +1,6 @@
+"COPPERCMDUSD"  ,
+"USDRON"  ,
+"USDTHB"  ,
+"USDCZK"  ,
+"GASCMDUSD"  ,
+"EURCZK"  ,
