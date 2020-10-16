@@ -22,49 +22,14 @@ std::string HTTPRequest::output_compressed_file(boost::asio::streambuf& taskStre
 	ofs.close();
 	return file_name_path_string;
 }
-/*
-//8-10-2020
-#include <boost/iostreams/copy.hpp>
-#include <boost/iostreams/filter/lzma.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/exception/diagnostic_information.hpp>
-#include <fstream>
-#include <iostream>
-#include <lzma.h>
-
-namespace io = boost::iostreams;
-
-void HTTPRequest::read_bi5_to_bin_boost(std::string input_file_path, std::string output_file_path) {
-    namespace io = boost::iostreams;
-
-    std::ifstream file(input_file_path, std::ios::binary);
-    std::ofstream out(output_file_path, std::ios::binary);
-
-    boost::iostreams::filtering_istreambuf in;
-    in.push(io::lzma_decompressor());
-    in.push(file);
-
-    try {
-        io::copy(in, out);
-    } catch(io::lzma_error const& e) {
-        std::cout << boost::diagnostic_information(e, true);
-        std::cout << e.code() << ": " << e.code().message() << "\n";
-    } catch(boost::exception const& e) {
-        std::cout << boost::diagnostic_information(e, true);
-    }
-}
-*/
 int HTTPRequest::read_bi5_main(boost::filesystem::path p, ptime epoch)
 {
 	boost::unique_lock<boost::mutex> read_bi5_to_bin_lock(mBOOST_LOGMutex,boost::defer_lock);
 	boost::unique_lock<boost::mutex> read_bi5_to_bin_lock2(m_read_bi5_to_binMutex, boost::defer_lock);
 
 	unsigned char *buffer;
-	size_t buffer_size;
+	boost::uintmax_t buffer_size;
 
-	//8-10-2020
-	//unsigned char *buffer_bin;
-	//size_t buffer_size_bin;
 
 	int counter;
 
@@ -83,40 +48,27 @@ int HTTPRequest::read_bi5_main(boost::filesystem::path p, ptime epoch)
 	const char *filename_to_bin = filename_string_to_bin.c_str();
 	const char *filename_to_csv = filename_string_to_csv.c_str();
 
-	//22-9-2020 here I open the downloaded file if possible
-	if (fs::exists(p) && fs::is_regular(p))
-	{
-		buffer_size = fs::file_size(p);
-		buffer = new unsigned char[buffer_size];
-	}
-	else {
-		read_bi5_to_bin_lock.lock();
-		BOOST_LOG((*mHTTPRequest_LoggingInstance_shared_pointer).mloggerCoutLog) << "Error: couldn't access the data file. |"
-			<< filename << "|" << std::endl;
-		read_bi5_to_bin_lock.unlock();
-		return 2;
-	}
+
+	//15-10-2020 now i will use other function to convert .bi5 to .bin file
+#include "lzma1900/CPP/7zip/Bundles/LzmaSpec/LzmaSpec.h"
+	// LzmaSpec.cpp -- LZMA Reference Decoder
+	//2015-06-14 : Igor Pavlov : Public domain */
+
+	// This code implements LZMA file decoding according to LZMA specification.
+	// This code is not optimized for speed.
+
+#include <stdio.h>
+	read_bi5_to_bin_lock2.lock();
+
+	main2(filename,filename_to_bin);
+	read_bi5_to_bin_lock2.unlock();
 
 
-	//22-9-2020 here I read the downloaded file into filestream
-	std::ifstream fin(filename, std::ifstream::binary);
+
+	std::ifstream fin(filename_to_bin, std::ifstream::binary);
 	fin.read(reinterpret_cast<char*>(buffer), buffer_size);
-
-	//8-10-2020
-	//boost::iostreams::filtering_istreambuf in;
-	//in.push(io::lzma_decompressor());
-	//in.push(fin);
-
 	fin.close();
 
-	//22-9-2020 here I check if file is related to japanese yen so that I determine how to write its value
-	/*
-	if symbols_xxx has mHTTPRequest_Symbol_str then PV=0.001
-	else if symbols_xxxx has mHTTPRequest_Symbol_str then PV=0.0001
-	else if symbols_xxxx has mHTTPRequest_Symbol_str then PV=0.00001
-	*/
-	//28-9-2020 I will make 3 vectors in utils.h for 3,4,5 point value ,then I find symbol in vector,
-	//std::size_t pos = mHTTPRequest_Symbol_str.find("JPY");
 
 	double PV;
 
@@ -145,63 +97,12 @@ int HTTPRequest::read_bi5_main(boost::filesystem::path p, ptime epoch)
 	}
 	read_bi5_to_bin_lock2.lock();
 	unsigned char *data_bin_buffer = 0 ;
-	/*
-	//8-10-2020
-    std::ofstream out(filename_to_bin, std::ios::binary);
-
-	try {
-		boost::iostreams::filtering_istreambuf in;
-		in.push(io::lzma_decompressor());
-		in.push(fin);
-		int x=in.size();
-		io::copy(in, out);
-	} catch(io::lzma_error const& e) {
-		std::cout << boost::diagnostic_information(e, true);
-		std::cout << e.code() << ": " << e.code().message() << "\n";
-	} catch(boost::exception const& e) {
-		std::cout << boost::diagnostic_information(e, true);
-	}
-	*/
-	//////////////////////////////////////////////////////////////////////////////////////
-	n47::tick_data *data = n47::read_bi5_to_bin(buffer, buffer_size, epoch, PV, &raw_size, &data_bin_buffer);
-
-	//5-11-2020 here i will save binary file
-	std::string file_name_path_string=output_compressed_file_2(&data_bin_buffer, raw_size, filename_to_bin);
+	n47::tick_data *data = n47::read_bin(buffer, buffer_size, epoch, PV);
 	read_bi5_to_bin_lock2.unlock();
 
-	path file_name_path_2{ file_name_path_string };
-
-	//8-10-2020path file_name_path_2{ filename_to_bin };
+	path file_name_path_2{ filename_to_bin };
 
 	buffer_size = 0;
-	//22-9-2020 here I open the binary file if possible
-	//n47::tick_data *data=0;
-	if (fs::exists(file_name_path_2) && fs::is_regular(file_name_path_2))
-	{
-		read_bi5_to_bin_lock.lock();
-		BOOST_LOG((*mHTTPRequest_LoggingInstance_shared_pointer).mloggerCoutLog) << boost::this_thread::get_id() <<"\t we can access the data .bin file. |"
-			<< filename_to_bin << "| with size ="<< fs::file_size(file_name_path_2) << std::endl;
-		read_bi5_to_bin_lock.unlock();
-
-		//8-10-2020
-		//buffer_size_bin = fs::file_size(file_name_path_2);
-		//buffer_bin = new unsigned char[buffer_size_bin];
-
-		// here I read the binary file into filestream
-		//std::ifstream fin_bin(filename_to_bin, std::ifstream::binary);
-		//fin_bin.read(reinterpret_cast<char*>(buffer_bin), buffer_size_bin);
-
-		// convert to tick data (with read_bin).
-		//data = n47::read_bin(buffer_bin, buffer_size_bin, epoch, PV);
-
-	}
-	else {
-		read_bi5_to_bin_lock.lock();
-		BOOST_LOG((*mHTTPRequest_LoggingInstance_shared_pointer).mloggerCoutLog) << "Error: couldn't access the data .bin file. |"
-			<< filename_to_bin << "|" << std::endl;
-		read_bi5_to_bin_lock.unlock();
-		return 2;
-	}
 
 	n47::tick_data_iterator iter;
 
